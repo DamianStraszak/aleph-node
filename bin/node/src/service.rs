@@ -1,5 +1,6 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
+// use crate::hard_forks::load_hard_forks;
 use aleph_primitives::AlephSessionApi;
 use aleph_runtime::{self, opaque::Block, RuntimeApi};
 use codec::Decode;
@@ -7,9 +8,9 @@ use finality_aleph::{
     run_aleph_consensus, AlephBlockImport, AlephConfig, AuthorityId, AuthorityKeystore,
     JustificationNotification, Metrics, SessionPeriod,
 };
-use crate::hard_forks::load_hard_forks;
 use futures::channel::mpsc;
 use log::{debug, warn};
+use sc_client_api::HeaderBackend;
 use sc_client_api::{CallExecutor, ExecutionStrategy, ExecutorProvider};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 use sc_executor::native_executor_instance;
@@ -24,7 +25,6 @@ use sp_runtime::{
     generic::BlockId,
     traits::{Block as BlockT, Zero},
 };
-use sc_client_api::HeaderBackend;
 use std::sync::Arc;
 
 // Our native executor instance.
@@ -37,7 +37,6 @@ native_executor_instance!(
 type FullClient = sc_service::TFullClient<Block, RuntimeApi, Executor>;
 type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
-
 
 #[allow(clippy::type_complexity)]
 pub fn new_partial(
@@ -81,9 +80,9 @@ pub fn new_partial(
     });
 
     let client: Arc<TFullClient<_, _, _>> = Arc::new(client);
-    let info = client.info();
-    debug!(target: "afa", "Client Info {:?}", info);
-    load_hard_forks(client.clone(), backend.clone());
+    // let info = client.info();
+    // debug!(target: "afa", "Client Info {:?}", info);
+    // load_hard_forks(client.clone(), backend.clone());
     let info = client.info();
     debug!(target: "afa", "Client Info {:?}", info);
 

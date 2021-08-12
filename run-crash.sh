@@ -21,7 +21,7 @@ echo "$1" > /tmp/n_members
 authorities=(Damian Tomasz Zbyszko Hansu Adam Matt Antoni Michal)
 authorities=("${authorities[@]::$1}")
 
-echo "[]" > /tmp/fork_history
+# echo "[]" > /tmp/fork_history
 
 ./target/debug/aleph-node dev-keys  --base-path /tmp --chain dev --key-types aura alp0
 
@@ -38,14 +38,14 @@ for i in ${!authorities[@]}; do
     --rpc-port $(expr 9933 + $i) \
     --port $(expr 30334 + $i) \
     --execution Native \
-    -lafa=trace \
-    -lAlephBFT=trace \
-    2> run1-$auth-$i.log > out& \
+    -lafa=debug \
+    --millisecs-per-block 1000 \
+    --session-period 100 \
+    2> run1-$auth-$i.log > out&
 done
 
-
 echo "Sleeping"
-sleep 40
+sleep 20
 echo "Killing and restarting"
 
 killall -9 aleph-node
@@ -53,10 +53,11 @@ killall -9 aleph-node
 authorities=(Damian Tomasz Zbyszko Hansu Adam Matt Antoni Michal)
 authorities=("${authorities[@]::$1}")
 
-echo "[{\"block_num\":10,\"bad_blocks\":[]}]" > /tmp/fork_history
+# echo "[{\"block_num\":10,\"bad_blocks\":[]}]" > /tmp/fork_history
 
 for i in ${!authorities[@]}; do
   auth=${authorities[$i]}
+  ./target/debug/aleph-node revert --chain dev --base-path /tmp/$auth --pruning archive 10
   ./target/debug/aleph-node \
     --validator \
     --chain dev \
@@ -66,9 +67,8 @@ for i in ${!authorities[@]}; do
     --rpc-port $(expr 9933 + $i) \
     --port $(expr 30334 + $i) \
     --execution Native \
-    -lafa=trace \
-    -lAlephBFT=trace \
-    2> run2-$auth-$i.log > out& \
+    -lafa=debug \
+    --millisecs-per-block 1000 \
+    --session-period 100 \
+    2> run2-$auth-$i.log > out&
 done
-
-

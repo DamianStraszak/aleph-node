@@ -1,10 +1,16 @@
-use sc_cli::{Error, KeystoreParams, RunCmd, SharedParams, SubstrateCli};
+use log::info;
+use sc_cli::{
+    CliConfiguration, Error, GenericNumber, KeystoreParams, PruningParams, RunCmd, SharedParams,
+    SubstrateCli,
+};
+use sc_client_api::{Backend, UsageProvider};
 use sc_service::config::{BasePath, KeystoreConfig};
-use std::{collections::HashMap, convert::TryFrom, sync::Arc};
+use std::{collections::HashMap, convert::TryFrom, fmt::Debug, str::FromStr, sync::Arc};
 
 use sc_keystore::LocalKeystore;
 use sp_core::crypto::KeyTypeId;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Zero};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -151,8 +157,60 @@ pub enum Subcommand {
     PurgeChain(sc_cli::PurgeChainCmd),
 
     /// Revert the chain to a previous state.
-    Revert(sc_cli::RevertCmd),
+    Revert(RevertCmd),
 
     /// Generate keys for local tests
     DevKeys(CLiDevKeys),
+}
+
+/// The `revert` command used revert the chain to a previous state.
+#[derive(Debug, StructOpt)]
+pub struct RevertCmd {
+    /// Number of blocks to revert.
+    #[structopt(default_value = "256")]
+    pub num: GenericNumber,
+
+    #[allow(missing_docs)]
+    #[structopt(flatten)]
+    pub shared_params: SharedParams,
+
+    #[allow(missing_docs)]
+    #[structopt(flatten)]
+    pub pruning_params: PruningParams,
+}
+
+impl RevertCmd {
+    /// Run the revert command
+    pub async fn run<B, BA, C>(&self, client: Arc<C>, backend: Arc<BA>) -> Result<(), Error>
+    where
+        B: BlockT,
+        BA: Backend<B>,
+        C: UsageProvider<B>,
+        <<<B as BlockT>::Header as HeaderT>::Number as FromStr>::Err: Debug,
+    {
+        let blocks = self.num.parse()?;
+
+        let reverted = backend.revert(blocks, true)?;
+        let info = client.usage_info().chain;
+
+        if reverted.0.is_zero() {
+            info!("There aren't any non-finalized blocks to revert.");
+        } else {
+            info!(
+                "Reverted {} blocks. Best: #{} ({})",
+                reverted.0, info.best_number, info.best_hash
+            );
+        }
+        Ok(())
+    }
+}
+
+impl CliConfiguration for RevertCmd {
+    fn shared_params(&self) -> &SharedParams {
+        &self.shared_params
+    }
+
+    fn pruning_params(&self) -> Option<&PruningParams> {
+        Some(&self.pruning_params)
+    }
 }

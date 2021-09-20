@@ -4,7 +4,6 @@ use codec::{Decode, Encode};
 use futures::channel::{mpsc, oneshot};
 use lru::LruCache;
 use parking_lot::Mutex;
-use sp_consensus::SelectChain;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
@@ -14,7 +13,6 @@ use std::{
     time::Duration,
 };
 
-const REFRESH_INTERVAL: u64 = 100;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_timer::Delay;
 use log::{debug, trace};
@@ -233,45 +231,43 @@ where
 }
 
 #[derive(Clone)]
-pub(crate) struct DataIO<B: BlockT> {
+pub(crate) struct DataIO<B, C, BE>
+where
+    B: BlockT,
+    C: crate::ClientForAleph<B, BE> + Send + Sync + 'static,
+    BE: Backend<B> + 'static,
+{
     pub(crate) best_chain: Arc<Mutex<AlephDataFor<B>>>,
     pub(crate) ordered_batch_tx: mpsc::UnboundedSender<OrderedBatch<AlephDataFor<B>>>,
     pub(crate) metrics: Option<Metrics<B::Header>>,
+    pub(crate) client: Arc<C>,
+    pub(crate) max_block_num: NumberFor<B>,
+    pub(crate) phantom: PhantomData<BE>,
 }
 
-pub(crate) async fn refresh_best_chain<B: BlockT, SC: SelectChain<B>>(
-    select_chain: SC,
-    best_chain: Arc<Mutex<AlephDataFor<B>>>,
-    mut exit: oneshot::Receiver<()>,
-) {
-    loop {
-        let delay = futures_timer::Delay::new(Duration::from_millis(REFRESH_INTERVAL));
-        tokio::select! {
-            _ = delay => {
-                let new_best_header = select_chain
-                    .best_chain()
-                    .await
-                    .expect("No best chain");
-                *best_chain.lock() = AlephData::new(new_best_header.hash(), *new_best_header.number());
-            }
-            _ = &mut exit => {
-                debug!(target: "afa", "Task for refreshing best chain received exit signal. Terminating.");
-                return;
-            }
-        }
-    }
-}
-
-impl<B: BlockT> aleph_bft::DataIO<AlephDataFor<B>> for DataIO<B> {
+impl<B, C, BE> aleph_bft::DataIO<AlephDataFor<B>> for DataIO<B, C, BE>
+where
+    B: BlockT,
+    C: crate::ClientForAleph<B, BE> + Send + Sync + 'static,
+    BE: Backend<B> + 'static,
+{
     type Error = Error;
 
     fn get_data(&self) -> AlephDataFor<B> {
-        let best = *self.best_chain.lock();
-
+        let info = self.client.info();
+        let mut best = AlephData::new(info.best_hash, info.best_number);
+        if info.best_number > self.max_block_num {
+            best = AlephData::new(
+                self.client.hash(self.max_block_num).unwrap().unwrap(),
+                self.max_block_num,
+            );
+        }
         if let Some(m) = &self.metrics {
             m.report_block(best.hash, std::time::Instant::now(), "get_data");
         }
+
         debug!(target: "afa", "Outputting {:?} in get_data", best);
+
         best
     }
 

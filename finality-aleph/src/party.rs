@@ -11,8 +11,8 @@ use crate::{
         split_network, AlephNetworkData, ConsensusNetwork, DataNetwork, NetworkData, RmcNetwork,
         SessionManager,
     },
-    session_id_from_block_num, AuthorityId, Future, KeyBox, Metrics, MultiKeychain, NodeIndex,
-    SessionId, SessionMap, SessionPeriod, KEY_TYPE,
+    session_id_from_block_num, should_be_justified, AuthorityId, Future, KeyBox, Metrics,
+    MultiKeychain, NodeIndex, SessionId, SessionMap, SessionPeriod, KEY_TYPE,
 };
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -212,8 +212,11 @@ async fn run_aggregator<B, C, BE>(
                         let to_finalize_headers = chain_extension_step(last_finalized, new_block_data, client.as_ref());
                         for header in to_finalize_headers.iter() {
                             if *header.number() <= last_block_in_session {
-                                aggregator.start_aggregation(header.hash()).await;
+                                if should_be_justified::<B>(*header.number(), last_block_in_session) {
+                                    aggregator.start_aggregation(header.hash()).await;
+                                }
                                 last_finalized = header.hash();
+
                             }
                             if *header.number() >= last_block_in_session {
                                 aggregator.notify_last_hash();

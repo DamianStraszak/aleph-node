@@ -68,6 +68,7 @@ pub struct MillisecsPerBlock(pub u64);
 
 use sp_core::crypto::KeyTypeId;
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"alp0");
+pub const JUSTIFICATION_PERIOD: u32 = 50;
 pub use crate::metrics::Metrics;
 use crate::party::{run_consensus_party, AlephParams};
 pub use aleph_primitives::{AuthorityId, AuthorityPair, AuthoritySignature};
@@ -236,6 +237,17 @@ pub fn last_block_of_session<B: Block>(
 
 pub fn session_id_from_block_num<B: Block>(num: NumberFor<B>, period: SessionPeriod) -> SessionId {
     SessionId(num.saturated_into::<u32>() / period.0)
+}
+
+pub fn should_be_justified<B: Block>(
+    num: NumberFor<B>,
+    last_block_of_session: NumberFor<B>,
+) -> bool {
+    if num == last_block_of_session {
+        return true;
+    }
+    let num: u32 = num.saturated_into::<u32>();
+    (num % JUSTIFICATION_PERIOD) == 0
 }
 
 pub struct AlephConfig<B: Block, N, C, SC> {
